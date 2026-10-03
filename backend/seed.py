@@ -10,7 +10,7 @@ sys.path.insert(0, dirname(abspath(__file__)))
 load_dotenv(os.path.join(dirname(dirname(abspath(__file__))), '.env'))
 load_dotenv()
 
-from app.db.database import SessionLocal, engine
+from app.db.database import SessionLocal, engine, Base
 from app.models.models import SchoolClass, Lesson, User, RoleEnum
 from app.core.security import get_password_hash
 
@@ -19,6 +19,9 @@ TEACHER_USER = os.getenv("TEACHER_USERNAME", "teacher")
 TEACHER_PASS = os.getenv("TEACHER_PASSWORD", "SuperSecretPassword2026!")
 
 def setup_database():
+    # Создаем таблицы, если их нет (для чистой установки в Docker)
+    Base.metadata.create_all(bind=engine)
+
     # Накатываем недостающие колонки в SQLite
     with engine.connect() as conn:
         try:
