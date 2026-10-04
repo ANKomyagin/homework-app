@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.db.database import get_db
 from app.models.models import User, RoleEnum, SchoolClass
 from app.schemas.user import UserCreate, UserLogin, UserResponse, TeacherLogin
@@ -15,12 +14,11 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     if not school_class:
         raise HTTPException(status_code=404, detail="Класс не найден")
 
-    # Нормализуем имя: убираем лишние пробелы по краям
-    normalized_name = user_data.full_name.strip()
+    # Нормализуем имя силами Python: убираем пробелы и делаем с большой буквы (Иванов Иван)
+    formatted_name = user_data.full_name.strip().title()
 
-    # Проверяем дубли с игнорированием регистра (lower)
     existing_user = db.query(User).filter(
-        func.lower(User.full_name) == normalized_name.lower(),
+        User.full_name == formatted_name,
         User.class_id == user_data.class_id
     ).first()
     
@@ -29,7 +27,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
     # Сохраняем имя в красивом виде с заглавной буквы (Иванов Иван)
     new_user = User(
-        full_name=normalized_name.title(),
+        full_name=formatted_name,
         class_id=user_data.class_id,
         role=RoleEnum.student,
         hashed_pin=get_password_hash(user_data.pin)
@@ -42,10 +40,11 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(user_data: UserLogin, response: Response, db: Session = Depends(get_db)):
-    normalized_name = user_data.full_name.strip()
+    # Точно так же нормализуем имя при входе
+    formatted_name = user_data.full_name.strip().title()
     
     user = db.query(User).filter(
-        func.lower(User.full_name) == normalized_name.lower(),
+        User.full_name == formatted_name,
         User.class_id == user_data.class_id
     ).first()
     
