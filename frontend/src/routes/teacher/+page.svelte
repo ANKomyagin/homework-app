@@ -12,7 +12,11 @@
 	// Состояние холстов
 	let canvases = {};
 	let isDrawing = {};
-	let isModified = {}; // Отслеживаем, на каких файлах учитель рисовал
+	let isModified = {};
+
+	// Переменные для Шаг Назад / Вперед
+	let canvasStates = $state({});
+	let lastActiveFileId = $state(null);
 
 	onMount(async () => {
 		try {
@@ -52,6 +56,8 @@
 		canvases = {};
 		isDrawing = {};
 		isModified = {};
+		canvasStates = {}; // Сбрасываем историю
+		lastActiveFileId = null;
 	}
 
 	function closeSubmission() {
@@ -68,18 +74,33 @@
 		ctx.lineWidth = 4;
 		ctx.lineCap = 'round';
 		ctx.lineJoin = 'round';
+
+		// Сохраняем пустое состояние для старта Ctrl+Z
+		if (!canvasStates[fileId]) {
+			canvasStates[fileId] = { history: [canvas.toDataURL()], step: 0 };
+		}
 	}
 
 	function startDraw(e, fileId) {
 		isDrawing[fileId] = true;
 		isModified[fileId] = true;
+		lastActiveFileId = fileId; // Запоминаем, где рисуем для Ctrl+Z
 		draw(e, fileId);
 	}
 
 	function stopDraw(fileId) {
+		if (!isDrawing[fileId]) return;
 		isDrawing[fileId] = false;
 		const ctx = canvases[fileId]?.getContext('2d');
 		ctx?.beginPath();
+
+		// Сохраняем шаг в историю
+		const canvas = canvases[fileId];
+		const state = canvasStates[fileId];
+		state.history = state.history.slice(0, state.step + 1);
+		state.history.push(canvas.toDataURL());
+		state.step++;
+		canvasStates[fileId] = { ...state }; // Триггер реактивности
 	}
 
 	function draw(e, fileId) {
@@ -100,6 +121,55 @@
 		ctx.stroke();
 		ctx.beginPath();
 		ctx.moveTo(x, y);
+	}
+
+	// ФУНКЦИИ ОТМЕНЫ
+	function undo(fileId) {
+		const state = canvasStates[fileId];
+		if (!state || state.step <= 0) return;
+		state.step--;
+		restoreState(fileId, state.history[state.step]);
+		canvasStates[fileId] = { ...state };
+		isModified[fileId] = state.step > 0;
+	}
+
+	function redo(fileId) {
+		const state = canvasStates[fileId];
+		if (!state || state.step >= state.history.length - 1) return;
+		state.step++;
+		restoreState(fileId, state.history[state.step]);
+		canvasStates[fileId] = { ...state };
+		isModified[fileId] = state.step > 0;
+	}
+
+	function restoreState(fileId, dataUrl) {
+		const canvas = canvases[fileId];
+		const ctx = canvas.getContext('2d');
+		const img = new Image();
+		img.src = dataUrl;
+		img.onload = () => {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.drawImage(img, 0, 0);
+		};
+	}
+
+	// Глобальный перехватчик Ctrl+Z / Ctrl+Y
+	function handleKeydown(e) {
+		if (!activeSubmission) return;
+		if (e.ctrlKey || e.metaKey) {
+			const targetFileId = lastActiveFileId || activeSubmission.files.find(f => f.type.includes('image'))?.id;
+			if (!targetFileId) return;
+
+			if (e.key.toLowerCase() === 'z') {
+				e.preventDefault();
+				if (e.shiftKey) redo(targetFileId);
+				else undo(targetFileId);
+			}
+			if (e.key.toLowerCase() === 'y') {
+				e.preventDefault();
+				redo(targetFileId);
+			}
+		}
 	}
 
 	async function saveFeedback() {
@@ -146,6 +216,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="min-h-screen bg-gray-50 p-6 md:p-10">
 	<div class="max-w-6xl mx-auto bg-white rounded-2xl shadow-sm p-6">
 		<div class="flex justify-between items-center mb-6">
@@ -187,13 +259,22 @@
 									{@const sub = dashboardData.submissions[`${student.id}_${lesson.id}`]}
 									<td class="px-6 py-4 text-center border-r">
 										{#if sub}
-											<button 
-												onclick={() => openSubmission(sub, student.name, lesson.title)}
-												class={`inline-flex items-center justify-center px-3 py-1 text-xs font-medium rounded-full cursor-pointer hover:shadow transition
-												${sub.is_on_time ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}
-											>
-												{sub.is_on_time ? 'Вовремя' : 'С опозданием'}
-											</button>
+											{@const isChecked = sub.feedback || (sub.files && sub.files.some(f => f.checked_url))}
+											<div class="flex flex-col items-center gap-1.5">
+												<button 
+													onclick={() => openSubmission(sub, student.name, lesson.title)}
+													class={`inline-flex items-center justify-center px-3 py-1 text-xs font-medium rounded-full cursor-pointer hover:shadow transition
+													${sub.is_on_time ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}
+												>
+													{sub.is_on_time ? 'Вовремя' : 'С опозданием'}
+												</button>
+												
+												{#if isChecked}
+													<span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+														✅ Проверено
+													</span>
+												{/if}
+											</div>
 										{:else}
 											<span class="text-gray-300">-</span>
 										{/if}
@@ -244,11 +325,28 @@
 
 									<!-- Если картинка: показываем холст для рисования -->
 									{#if file.type.includes('image')}
-										<p class="text-xs text-gray-500">Рисуйте пальцем или мышкой прямо по изображению:</p>
+										<div class="flex justify-between items-end">
+											<p class="text-xs text-gray-500">Рисуйте пальцем или мышкой. Доступны Ctrl+Z и Ctrl+Y</p>
+											
+											<!-- Кнопки Отмены и Возврата (для мобилок) -->
+											<div class="flex gap-2">
+												<button 
+													disabled={!canvasStates[file.id] || canvasStates[file.id].step <= 0}
+													onclick={() => undo(file.id)}
+													class="px-2.5 py-1 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-40 transition shadow-xs flex items-center gap-1"
+												>↩ Отменить</button>
+												<button 
+													disabled={!canvasStates[file.id] || canvasStates[file.id].step >= canvasStates[file.id].history.length - 1}
+													onclick={() => redo(file.id)}
+													class="px-2.5 py-1 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-40 transition shadow-xs flex items-center gap-1"
+												>↪ Вернуть</button>
+											</div>
+										</div>
+
 										<div class="relative inline-block max-w-full overflow-hidden rounded-lg border bg-gray-200">
 											<img 
 												id="img-{file.id}"
-												src={file.url} 
+												src={file.checked_url || file.url} 
 												alt={file.name} 
 												class="max-h-[700px] w-auto block select-none"
 												onload={(e) => initCanvas(e.currentTarget, file.id)}

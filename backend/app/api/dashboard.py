@@ -60,6 +60,7 @@ def get_student_lessons(current_user: User = Depends(get_current_user), db: Sess
     return {
         "user_created_at": current_user.created_at.isoformat() if current_user.created_at else "2026-09-01T00:00:00",
         "class_name": current_user.school_class.name if current_user.school_class else "",
+        "student_name": current_user.full_name,
         "lessons": result
     }
 

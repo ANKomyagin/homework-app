@@ -4,6 +4,7 @@
 	let lessons = $state([]);
 	let userCreatedAt = $state('2026-09-01');
 	let className = $state('...');
+	let studentName = $state('');
 	let selectedLesson = $state(null);
 	let files = $state([]);
 	let comment = $state('');
@@ -32,6 +33,7 @@
 				lessons = data.lessons;
 				userCreatedAt = data.user_created_at;
 				className = data.class_name || '...';
+				studentName = data.student_name || '';
 
 				if (lessons.length > 0) {
 					// Если уже был выбран урок, обновляем его данные
@@ -191,7 +193,7 @@
 		<!-- Верхняя плашка -->
 		<div class="flex justify-between items-center bg-white px-6 py-4 rounded-2xl shadow-xs border border-slate-100">
 			<div>
-				<h1 class="text-xl font-bold text-slate-800">Кабинет ученика</h1>
+				<h1 class="text-xl font-bold text-slate-800">{studentName || 'Кабинет ученика'}</h1>
 				<p class="text-xs text-slate-400">Английский язык • {className} класс</p>
 			</div>
 			<button onclick={() => window.location.href = '/'} class="text-xs text-slate-400 hover:text-red-500 font-medium transition">
