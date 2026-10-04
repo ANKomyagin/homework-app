@@ -8,6 +8,7 @@
 	let files = $state([]);
 	let comment = $state('');
 	let isUploading = $state(false);
+	let uploadProgress = $state(0);
 	let message = $state({ text: '', isError: false });
 	let fileInput = $state(null);
 
@@ -95,6 +96,7 @@
 			items.push({
 				dayNumber: d,
 				dateStr,
+				isToday: dateStr === todayStr,
 				isLessonDay,
 				lesson,
 				status
@@ -111,34 +113,50 @@
 		if (currentMonth === 11) { currentMonth = 0; currentYear++; } else { currentMonth++; }
 	}
 
-	async function submitHomework() {
+	function submitHomework() {
 		if (!selectedLesson) return;
 
 		isUploading = true;
+		uploadProgress = 0;
 		message = { text: '', isError: false };
 
 		const formData = new FormData();
 		formData.append('text_comment', comment);
 		files.forEach(f => formData.append('files', f));
 
-		try {
-			const res = await fetch(`/api/submissions/${selectedLesson.id}`, {
-				method: 'POST',
-				body: formData
-			});
-			if (res.ok) {
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', `/api/submissions/${selectedLesson.id}`, true);
+		
+		// Отслеживаем прогресс
+		xhr.upload.onprogress = (event) => {
+			if (event.lengthComputable) {
+				uploadProgress = Math.round((event.loaded / event.total) * 100);
+			}
+		};
+
+		// Ответ сервера
+		xhr.onload = async () => {
+			isUploading = false;
+			if (xhr.status >= 200 && xhr.status < 300) {
 				message = { text: 'Изменения сохранены!', isError: false };
 				files = [];
-				await loadLessons();
+				await loadLessons(); // Обновляем данные с сервера
 			} else {
-				const err = await res.json();
-				message = { text: err.detail || 'Ошибка отправки', isError: true };
+				let errText = 'Ошибка отправки';
+				try {
+					const err = JSON.parse(xhr.responseText);
+					errText = err.detail || errText;
+				} catch(e) {}
+				message = { text: errText, isError: true };
 			}
-		} catch (e) {
-			message = { text: 'Ошибка сети', isError: true };
-		} finally {
+		};
+
+		xhr.onerror = () => {
 			isUploading = false;
-		}
+			message = { text: 'Ошибка сети', isError: true };
+		};
+
+		xhr.send(formData);
 	}
 
 	async function deleteAttachedFile(fileId) {
@@ -248,8 +266,17 @@
 								${item.status === 'missed' ? 'bg-rose-50 border-2 border-rose-300 text-rose-800' : ''}
 								${item.status === 'before_reg' ? 'bg-slate-50 border border-slate-200 text-slate-400' : ''}
 								${item.status === 'upcoming' ? 'bg-blue-50 border-2 border-blue-200 text-blue-800 hover:border-blue-400' : ''}
+								${item.isToday ? 'ring-2 ring-slate-800 ring-offset-2 font-black' : ''} 
 							`}
 						>
+							<!-- Индикатор наличия отзыва от учителя -->
+							{#if item.lesson?.submission?.teacher_feedback}
+								<span class="absolute top-1 right-1 flex h-3 w-3">
+									<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+									<span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+								</span>
+							{/if}
+
 							<span class="text-sm font-bold">{item.dayNumber}</span>
 							
 							{#if item.status === 'on_time'}
@@ -295,9 +322,10 @@
 
 				<!-- Отзыв учителя -->
 				{#if selectedLesson.submission?.teacher_feedback}
-					<div class="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-1">
-						<div class="text-xs font-bold text-amber-800">Комментарий преподавателя:</div>
-						<div class="text-sm text-amber-900">{selectedLesson.submission.teacher_feedback}</div>
+					<div class="bg-gradient-to-r from-blue-500 to-blue-600 p-5 rounded-2xl shadow-md space-y-2 text-white my-4 relative overflow-hidden">
+						<div class="absolute -right-4 -top-4 text-6xl opacity-20">💬</div>
+						<div class="text-xs font-bold uppercase tracking-wider text-blue-100">Новое сообщение от учителя:</div>
+						<div class="text-base font-medium leading-relaxed">{selectedLesson.submission.teacher_feedback}</div>
 					</div>
 				{/if}
 
@@ -367,12 +395,22 @@
 						</div>
 					{/if}
 
+					<!-- Блок вывода прогресса -->
+					{#if isUploading}
+						<div class="space-y-1">
+							<div class="w-full bg-slate-100 rounded-full h-2">
+								<div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: {uploadProgress}%"></div>
+							</div>
+							<p class="text-xs text-center font-medium text-slate-500">Загрузка: {uploadProgress}%</p>
+						</div>
+					{/if}
+
 					<button 
 						onclick={submitHomework}
 						disabled={isUploading}
 						class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition disabled:opacity-50"
 					>
-						{isUploading ? 'Сохранение...' : (selectedLesson.submission ? 'Сохранить изменения' : 'Отправить ДЗ')}
+						{isUploading ? 'Отправка...' : (selectedLesson.submission ? 'Сохранить изменения' : 'Отправить ДЗ')}
 					</button>
 				</div>
 			</div>

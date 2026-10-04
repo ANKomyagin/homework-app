@@ -1,14 +1,25 @@
+import os
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# SQLite сохранит базу прямо в папке backend
-SQLALCHEMY_DATABASE_URL = "sqlite:///./homework.db"
+# Читаем путь из Docker, либо используем локальный по умолчанию
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "SQLALCHEMY_DATABASE_URL", 
+    "sqlite:///./homework.db"
+)
 
-# connect_args={"check_same_thread": False} нужно только для SQLite в FastAPI
+# Если используем SQLite и папки еще нет — создаем её, иначе упадет ошибка
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite:///"):
+    db_path = SQLALCHEMY_DATABASE_URL.replace("sqlite:///", "")
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 
+# WAL-мод для защиты от блокировок "database is locked"
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
@@ -17,10 +28,8 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
-# Зависимость для получения сессии БД в эндпоинтах
 def get_db():
     db = SessionLocal()
     try:
