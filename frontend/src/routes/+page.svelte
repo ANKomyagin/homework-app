@@ -42,7 +42,12 @@
 				window.location.href = data.user.role === 'teacher' ? '/teacher' : '/student';
 			} else {
 				const err = await res.json();
-				errorMessage = err.detail || 'Ошибка авторизации';
+				// Если Pydantic отбил запрос (ошибка валидации), detail будет массивом
+				if (Array.isArray(err.detail)) {
+					errorMessage = 'Пароль должен состоять ровно из 4 символов';
+				} else {
+					errorMessage = err.detail || 'Ошибка авторизации';
+				}
 			}
 		} catch (error) {
 			errorMessage = 'Ошибка соединения с сервером';
@@ -74,7 +79,7 @@
 				<input id="fullname-input" type="text" bind:value={fullName} placeholder="Иванов Иван" class="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3">
 			</div>
 			<div>
-				<label class="block text-sm font-medium text-gray-700" for="pin-input">ПИН-код (4 цифры)</label>
+				<label class="block text-sm font-medium text-gray-700" for="pin-input">Пароль / ПИН (4 символа)</label>
 				<input id="pin-input" type="password" maxlength="4" bind:value={pin} placeholder="••••" class="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 text-center tracking-[1em] font-bold">
 			</div>
 
