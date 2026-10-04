@@ -9,8 +9,10 @@
 	// Состояние открытого модального окна проверки
 	let activeSubmission = $state(null);
 	let feedbackText = $state('');
-	let canvasElement = $state(null);
-	let isDrawing = $state(false);
+	// Состояние холстов
+	let canvases = {};
+	let isDrawing = {};
+	let isModified = {}; // Отслеживаем, на каких файлах учитель рисовал
 
 	onMount(async () => {
 		try {
@@ -47,40 +49,46 @@
 	function openSubmission(sub, studentName, lessonTitle) {
 		activeSubmission = { ...sub, studentName, lessonTitle };
 		feedbackText = sub.feedback || '';
+		canvases = {};
+		isDrawing = {};
+		isModified = {};
 	}
 
 	function closeSubmission() {
 		activeSubmission = null;
 	}
 
-	// Инициализация холста для рисования поверх картинки
-	function initCanvas(imgElement) {
-		if (!canvasElement || !imgElement) return;
-		canvasElement.width = imgElement.naturalWidth || imgElement.width;
-		canvasElement.height = imgElement.naturalHeight || imgElement.height;
-		const ctx = canvasElement.getContext('2d');
-		ctx.strokeStyle = '#ef4444'; // Красный маркер
+	function initCanvas(imgElement, fileId) {
+		const canvas = canvases[fileId];
+		if (!canvas || !imgElement) return;
+		canvas.width = imgElement.naturalWidth || imgElement.width;
+		canvas.height = imgElement.naturalHeight || imgElement.height;
+		const ctx = canvas.getContext('2d');
+		ctx.strokeStyle = '#ef4444'; 
 		ctx.lineWidth = 4;
 		ctx.lineCap = 'round';
+		ctx.lineJoin = 'round';
 	}
 
-	function startDraw(e) {
-		isDrawing = true;
-		draw(e);
+	function startDraw(e, fileId) {
+		isDrawing[fileId] = true;
+		isModified[fileId] = true;
+		draw(e, fileId);
 	}
 
-	function stopDraw() {
-		isDrawing = false;
-		const ctx = canvasElement?.getContext('2d');
+	function stopDraw(fileId) {
+		isDrawing[fileId] = false;
+		const ctx = canvases[fileId]?.getContext('2d');
 		ctx?.beginPath();
 	}
 
-	function draw(e) {
-		if (!isDrawing || !canvasElement) return;
-		const ctx = canvasElement.getContext('2d');
-		const rect = canvasElement.getBoundingClientRect();
-		const scaleX = canvasElement.width / rect.width;
-		const scaleY = canvasElement.height / rect.height;
+	function draw(e, fileId) {
+		if (!isDrawing[fileId] || !canvases[fileId]) return;
+		const canvas = canvases[fileId];
+		const ctx = canvas.getContext('2d');
+		const rect = canvas.getBoundingClientRect();
+		const scaleX = canvas.width / rect.width;
+		const scaleY = canvas.height / rect.height;
 
 		const clientX = e.touches ? e.touches[0].clientX : e.clientX;
 		const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -96,11 +104,42 @@
 
 	async function saveFeedback() {
 		if (!activeSubmission) return;
+		
+		// 1. Отправляем текстовый отзыв
 		await fetch(`/api/teacher/feedback/${activeSubmission.id}`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ feedback: feedbackText })
 		});
+
+		// 2. Отправляем разрисованные картинки
+		for (const file of activeSubmission.files) {
+			// Если файл — картинка, и учитель на ней что-то нарисовал
+			if (file.type.includes('image') && isModified[file.id]) {
+				const img = document.getElementById(`img-${file.id}`);
+				const canvas = canvases[file.id];
+				
+				// Создаем временный холст для склейки оригинала с красным маркером
+				const tempCanvas = document.createElement('canvas');
+				tempCanvas.width = canvas.width;
+				tempCanvas.height = canvas.height;
+				const tCtx = tempCanvas.getContext('2d');
+				
+				// Склеиваем слои
+				tCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+				tCtx.drawImage(canvas, 0, 0);
+				
+				// Получаем итоговую картинку и шлем на сервер
+				const dataUrl = tempCanvas.toDataURL('image/webp', 0.9);
+				
+				await fetch(`/api/teacher/check_file/${file.id}`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ image_data: dataUrl })
+				});
+			}
+		}
+
 		alert('Отзыв сохранен!');
 		await loadDashboard();
 		closeSubmission();
@@ -206,21 +245,23 @@
 									<!-- Если картинка: показываем холст для рисования -->
 									{#if file.type.includes('image')}
 										<p class="text-xs text-gray-500">Рисуйте пальцем или мышкой прямо по изображению:</p>
-										<div class="relative inline-block max-w-full overflow-hidden rounded-lg border">
+										<div class="relative inline-block max-w-full overflow-hidden rounded-lg border bg-gray-200">
 											<img 
+												id="img-{file.id}"
 												src={file.url} 
 												alt={file.name} 
-												class="max-h-[500px] w-auto block select-none"
-												onload={(e) => initCanvas(e.currentTarget)}
+												class="max-h-[700px] w-auto block select-none"
+												onload={(e) => initCanvas(e.currentTarget, file.id)}
 											/>
 											<canvas 
-												bind:this={canvasElement}
-												onmousedown={startDraw}
-												onmouseup={stopDraw}
-												onmousemove={draw}
-												ontouchstart={startDraw}
-												ontouchend={stopDraw}
-												ontouchmove={draw}
+												bind:this={canvases[file.id]}
+												onmousedown={(e) => startDraw(e, file.id)}
+												onmouseup={() => stopDraw(file.id)}
+												onmousemove={(e) => draw(e, file.id)}
+												onmouseout={() => stopDraw(file.id)}
+												ontouchstart={(e) => startDraw(e, file.id)}
+												ontouchend={() => stopDraw(file.id)}
+												ontouchmove={(e) => draw(e, file.id)}
 												class="absolute inset-0 cursor-crosshair touch-none w-full h-full"
 											></canvas>
 										</div>

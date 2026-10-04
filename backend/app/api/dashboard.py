@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -27,10 +29,14 @@ def get_student_lessons(current_user: User = Depends(get_current_user), db: Sess
         if f.submission_id not in files_by_sub:
             files_by_sub[f.submission_id] = []
         normalized_path = f.saved_path.replace('\\', '/')
+        checked_normalized = f.checked_path.replace('\\', '/') if f.checked_path else None
+        
         files_by_sub[f.submission_id].append({
             "id": f.id,
             "name": f.original_name,
-            "url": f"/{normalized_path}"
+            "type": f.file_type,
+            "url": f"/{normalized_path}",
+            "checked_url": f"/{checked_normalized}" if checked_normalized else None
         })
 
     result = []
@@ -76,12 +82,14 @@ def get_teacher_dashboard(class_id: int, current_user: User = Depends(get_curren
         if f.submission_id not in files_by_sub:
             files_by_sub[f.submission_id] = []
         normalized_path = f.saved_path.replace('\\', '/')
+        checked_normalized = f.checked_path.replace('\\', '/') if f.checked_path else None
+        
         files_by_sub[f.submission_id].append({
             "id": f.id,
             "name": f.original_name,
             "type": f.file_type,
-            # Формируем публичную ссылку на файл
-            "url": f"/{normalized_path}"
+            "url": f"/{normalized_path}",
+            "checked_url": f"/{checked_normalized}" if checked_normalized else None
         })
     
     subs_dict = {}
@@ -116,3 +124,35 @@ def save_feedback(
     sub.teacher_feedback = feedback
     db.commit()
     return {"message": "Отзыв успешно сохранен"}
+
+@router.post("/teacher/check_file/{file_id}")
+def save_checked_file(
+    file_id: int, 
+    image_data: str = Body(..., embed=True), 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in [RoleEnum.teacher, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Только для учителя")
+        
+    db_file = db.query(DBFile).filter(DBFile.id == file_id).first()
+    if not db_file:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+        
+    # Парсим Base64 картинку с фронтенда
+    if "," in image_data:
+        image_data = image_data.split(",")[1]
+        
+    file_bytes = base64.b64decode(image_data)
+    
+    # Формируем путь для сохранения: "media/.../image_checked.webp"
+    original_path = Path(db_file.saved_path)
+    checked_name = f"{original_path.stem}_checked.webp"
+    checked_path = original_path.parent / checked_name
+    
+    with open(checked_path, "wb") as f:
+        f.write(file_bytes)
+        
+    db_file.checked_path = str(checked_path)
+    db.commit()
+    return {"message": "Файл успешно проверен"}

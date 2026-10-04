@@ -335,13 +335,22 @@
 						<label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Прикрепленные файлы</label>
 						<ul class="space-y-2">
 							{#each selectedLesson.submission.files as f}
-								<li class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm">
-									<a href={f.url} target="_blank" class="text-blue-600 hover:underline truncate max-w-[80%] font-medium">
-										📎 {f.name}
-									</a>
-									<button onclick={() => deleteAttachedFile(f.id)} class="text-xs text-rose-500 hover:text-rose-700 font-semibold px-2 py-1 hover:bg-rose-50 rounded">
-										Удалить
-									</button>
+								<li class="flex flex-col p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm gap-2">
+									<div class="flex items-center justify-between w-full">
+										<a href={f.url} target="_blank" class="text-blue-600 hover:underline truncate max-w-[80%] font-medium">
+											📎 {f.name}
+										</a>
+										<button onclick={() => deleteAttachedFile(f.id)} class="text-xs text-rose-500 hover:text-rose-700 font-semibold px-2 py-1 hover:bg-rose-50 rounded">
+											Удалить
+										</button>
+									</div>
+									
+									<!-- Если есть файл с пометками учителя -->
+									{#if f.checked_url}
+										<a href={f.checked_url} target="_blank" class="inline-flex items-center self-start text-xs text-emerald-700 font-bold hover:underline bg-emerald-100/70 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors hover:bg-emerald-200 shadow-sm mt-1">
+											✨ Посмотреть проверку (с пометками)
+										</a>
+									{/if}
 								</li>
 							{/each}
 						</ul>
