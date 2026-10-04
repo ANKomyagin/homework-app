@@ -55,6 +55,7 @@ def login(user_data: UserLogin, response: Response, db: Session = Depends(get_db
         key="access_token",
         value=f"Bearer {access_token}",
         httponly=True,  # Защита от XSS (JS во фронтенде не сможет украсть куки)
+        secure=True,
         max_age=30 * 24 * 60 * 60, # 30 дней в секундах
         samesite="lax"
     )
@@ -83,6 +84,7 @@ def teacher_login(data: TeacherLogin, response: Response, db: Session = Depends(
         key="access_token",
         value=f"Bearer {access_token}",
         httponly=True,
+        secure=True,
         max_age=30 * 24 * 60 * 60,
         samesite="lax"
     )

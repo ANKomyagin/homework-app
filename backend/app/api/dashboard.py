@@ -26,10 +26,11 @@ def get_student_lessons(current_user: User = Depends(get_current_user), db: Sess
     for f in files:
         if f.submission_id not in files_by_sub:
             files_by_sub[f.submission_id] = []
+        normalized_path = f.saved_path.replace('\\', '/')
         files_by_sub[f.submission_id].append({
             "id": f.id,
             "name": f.original_name,
-            "url": f"/{f.saved_path.replace('\\\\', '/')}"
+            "url": f"/{normalized_path}"
         })
 
     result = []
@@ -73,12 +74,13 @@ def get_teacher_dashboard(class_id: int, current_user: User = Depends(get_curren
     for f in files:
         if f.submission_id not in files_by_sub:
             files_by_sub[f.submission_id] = []
+        normalized_path = f.saved_path.replace('\\', '/')
         files_by_sub[f.submission_id].append({
             "id": f.id,
             "name": f.original_name,
             "type": f.file_type,
             # Формируем публичную ссылку на файл
-            "url": f"/{f.saved_path.replace('\\\\', '/')}"
+            "url": f"/{normalized_path}"
         })
     
     subs_dict = {}
