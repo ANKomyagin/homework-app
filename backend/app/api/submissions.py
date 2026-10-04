@@ -49,9 +49,8 @@ async def upload_submission(
         Submission.lesson_id == lesson_id
     ).first()
 
-    # Проверка на дедлайн: вовремя ли сдано?
-    # Если текущая дата меньше или равна дате урока, то вовремя.
-    is_on_time = datetime.now(MSK).date() <= lesson.date
+    now_msk = datetime.utcnow() + timedelta(hours=3)
+    is_on_time = now_msk.date() <= lesson.date
 
     if not submission:
         submission = Submission(
@@ -59,13 +58,14 @@ async def upload_submission(
             lesson_id=lesson_id,
             text_comment=text_comment,
             is_on_time=is_on_time,
-            updated_at=datetime.now(MSK)
+            submitted_at=now_msk,
+            updated_at=now_msk
         )
         db.add(submission)
         db.commit()
         db.refresh(submission)
     else:
-        submission.updated_at = datetime.now(MSK) # <-- Фиксируем дату изменения
+        submission.updated_at = now_msk # <-- Фиксируем дату изменения
         if text_comment is not None:
             submission.text_comment = text_comment
         db.commit()
@@ -81,8 +81,9 @@ async def upload_submission(
         file_ext = Path(upload_file.filename).suffix.lower()
         base_name = Path(upload_file.filename).stem
         
+        now_msk = datetime.utcnow() + timedelta(hours=3)
         # Генерируем уникальное имя файла, чтобы не перезаписать случайные совпадения
-        unique_filename = f"{base_name}_{int(datetime.now(MSK).timestamp())}{file_ext}"
+        unique_filename = f"{base_name}_{int(now_msk.timestamp())}{file_ext}"
         file_path = save_dir / unique_filename
 
         # Проверяем, картинка ли это
@@ -96,7 +97,7 @@ async def upload_submission(
                 if image.mode in ("RGBA", "P"):
                     image = image.convert("RGB")
                 
-                webp_filename = f"{base_name}_{int(datetime.now(MSK).timestamp())}.webp"
+                webp_filename = f"{base_name}_{int(now_msk.timestamp())}.webp"
                 file_path = save_dir / webp_filename
                 
                 image.save(file_path, "WEBP", quality=80)
@@ -147,6 +148,7 @@ def delete_file(file_id: int, current_user: User = Depends(get_current_user), db
         pass
 
     db.delete(db_file)
-    submission.updated_at = datetime.now(MSK) # Обновляем время изменения сдачи
+    now_msk = datetime.utcnow() + timedelta(hours=3)
+    submission.updated_at = now_msk # Обновляем время изменения сдачи
     db.commit()
     return {"message": "Файл успешно удален"}

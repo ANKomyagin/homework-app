@@ -3,6 +3,7 @@
 
 	let lessons = $state([]);
 	let userCreatedAt = $state('2026-09-01');
+	let className = $state('...');
 	let selectedLesson = $state(null);
 	let files = $state([]);
 	let comment = $state('');
@@ -29,6 +30,7 @@
 				const data = await res.json();
 				lessons = data.lessons;
 				userCreatedAt = data.user_created_at;
+				className = data.class_name || '...';
 
 				if (lessons.length > 0) {
 					// Если уже был выбран урок, обновляем его данные
@@ -153,7 +155,12 @@
 
 	function formatDate(isoStr) {
 		if (!isoStr) return '';
-		const d = new Date(isoStr);
+		// Жестко привязываем к часовому поясу МСК (+03:00), если бэкенд отдал дату без зоны
+		let tzStr = isoStr;
+		if (!tzStr.includes('+') && !tzStr.includes('Z')) {
+			tzStr += '+03:00';
+		}
+		const d = new Date(tzStr);
 		return d.toLocaleDateString('ru-RU') + ' в ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 	}
 </script>
@@ -167,7 +174,7 @@
 		<div class="flex justify-between items-center bg-white px-6 py-4 rounded-2xl shadow-xs border border-slate-100">
 			<div>
 				<h1 class="text-xl font-bold text-slate-800">Кабинет ученика</h1>
-				<p class="text-xs text-slate-400">Английский язык • 10 А класс</p>
+				<p class="text-xs text-slate-400">Английский язык • {className} класс</p>
 			</div>
 			<button onclick={() => window.location.href = '/'} class="text-xs text-slate-400 hover:text-red-500 font-medium transition">
 				Выйти
