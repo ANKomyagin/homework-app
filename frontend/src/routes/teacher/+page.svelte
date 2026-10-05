@@ -240,7 +240,7 @@
 				<table class="w-full text-sm text-left text-gray-500 border border-gray-200">
 					<thead class="text-xs text-gray-700 uppercase bg-gray-100">
 						<tr>
-							<th class="px-6 py-4 border-b border-r font-bold w-1/4">ФИО Ученика</th>
+							<th class="px-6 py-4 border-b border-gray-300 border-r-2 font-bold min-w-[220px] sticky left-0 bg-gray-100 z-20">ФИО Ученика</th>
 							{#each dashboardData.lessons as lesson}
 								<th class="px-6 py-4 border-b text-center border-r min-w-[150px]">
 									<div>{new Date(lesson.date).toLocaleDateString('ru-RU')}</div>
@@ -251,8 +251,11 @@
 					</thead>
 					<tbody>
 						{#each dashboardData.students as student, index}
-							<tr class="bg-white border-b hover:bg-gray-50">
-								<td class="px-6 py-4 font-medium text-gray-900 border-r">
+							<!-- Добавили класс group для синхронизации hover-эффекта -->
+							<tr class="bg-white border-b hover:bg-gray-50 group">
+								
+								<!-- Сделали ячейку липкой и добавили цвет фона -->
+								<td class="px-6 py-4 font-medium text-gray-900 border-gray-200 border-r-2 sticky left-0 bg-white group-hover:bg-gray-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
 									{index + 1}. {student.name}
 								</td>
 								{#each dashboardData.lessons as lesson}
